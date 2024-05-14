@@ -41,8 +41,6 @@ io.on('connection', socket => {
   socket.on('send:message', async ({ senderId, receiverId, text }) => {
     try {
       if (authenticateUser(senderId) && authenticateUser(receiverId) && text) {
-        // const message = new Message({ senderId, receiverId, text });
-        // await message.save();
         const messageData = { senderId, receiverId, text };
         const date = new Date().toISOString().slice(0, 19).replace('T', ' ');
         const message = {
@@ -53,7 +51,6 @@ io.on('connection', socket => {
           read: false,
           sent: false
         }
-        // const message2 = JSON.stringify(message);
         const querySelect = `SELECT * FROM messages2 WHERE user='${senderId}' OR user='${receiverId}'`;
         const result = await queryAsync(querySelect);
         console.log('existing messages: ', result);
@@ -82,10 +79,6 @@ io.on('connection', socket => {
             return result;
           }
           await Promise.all([insert(senderId, allSenderMessages), insert(receiverId, allReceiverMessages)]);
-          // allReceiverMessages.push(data);
-          // const result2 = await queryAsync(querySelect);
-          // io.emit(`receive:message:${receiverId}`, messageData);
-          // console.log('emitter called: ', messageData);
         } else {
           allSenderMessages.push(message);
           allReceiverMessages.push(message);
@@ -95,9 +88,6 @@ io.on('connection', socket => {
           const result2 = queryAsync(query2);
           await Promise.all([result, result2]);
         }
-        // console.log('Query result:', result);
-        // const query = `INSERT INTO messages(sender,receiver,text,date) VALUES('${senderId}','${receiverId}','${text}','${date}')`;
-        // const result2 = await queryAsync(querySelect);
         io.emit(`receive:message:${receiverId}`, messageData);
         console.log('emitter called: ', messageData);
       } else {
