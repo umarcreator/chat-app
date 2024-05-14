@@ -4,6 +4,8 @@ const http = require('http');
 const socketIO = require('socket.io');
 const con = require('./dbUrl');
 // const path = require('path');
+const util = require('util');
+const queryAsync = util.promisify(con.query).bind(con);
 
 const app = express();
 // app.use(cors({}));
@@ -41,17 +43,63 @@ io.on('connection', socket => {
       if (authenticateUser(senderId) && authenticateUser(receiverId) && text) {
         // const message = new Message({ senderId, receiverId, text });
         // await message.save();
-        const message = { senderId, receiverId, text };
+        const messageData = { senderId, receiverId, text };
         const date = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const query = `INSERT INTO messages(sender,receiver,text,date) VALUES('${senderId}','${receiverId}','${text}','${date}')`;
-        con.query(query, (err, result) => {
-            if (err) {
-                console.log(err);
-            } else {
-                io.emit(`receive:message:${receiverId}`, message);
-                console.log('emitter called: ', message);
+        const message = {
+          sender: senderId,
+          receiver: receiverId,
+          text: text,
+          date: date,
+          read: false,
+          sent: false
+        }
+        // const message2 = JSON.stringify(message);
+        const querySelect = `SELECT * FROM messages2 WHERE user='${senderId}' OR user='${receiverId}'`;
+        const result = await queryAsync(querySelect);
+        console.log('existing messages: ', result);
+        let allSenderMessages = [];
+        let allReceiverMessages = [];
+        if(result.length > 0) {
+          result.map(i => {
+            if(i.user == senderId) {
+              allSenderMessages = JSON.parse(i.data);
             }
-        });
+            if(i.user == receiverId) {
+              allReceiverMessages = JSON.parse(i.data);
+            }
+          });
+          const insert = async (user, allMessages) => {
+            console.log('allMessages & data: ', allMessages, message);
+            let query;
+            if(allMessages.length > 0) {
+              allMessages.push(message);
+              query = `UPDATE messages2 SET data='${JSON.stringify(allMessages)}' WHERE user='${user}'`;
+            } else {
+              allMessages.push(message);
+              query = `INSERT INTO messages2(user,data,last_updated) VALUES('${user}','${JSON.stringify(allMessages)}','${date}')`;
+            }
+            const result = await queryAsync(query);
+            return result;
+          }
+          await Promise.all([insert(senderId, allSenderMessages), insert(receiverId, allReceiverMessages)]);
+          // allReceiverMessages.push(data);
+          // const result2 = await queryAsync(querySelect);
+          // io.emit(`receive:message:${receiverId}`, messageData);
+          // console.log('emitter called: ', messageData);
+        } else {
+          allSenderMessages.push(message);
+          allReceiverMessages.push(message);
+          const query = `INSERT INTO messages2(user,data,last_updated) VALUES('${senderId}','${JSON.stringify(allSenderMessages)}','${date}')`;
+          const query2 = `INSERT INTO messages2(user,data,last_updated) VALUES('${receiverId}','${JSON.stringify(allReceiverMessages)}','${date}')`;
+          const result = queryAsync(query);
+          const result2 = queryAsync(query2);
+          await Promise.all([result, result2]);
+        }
+        // console.log('Query result:', result);
+        // const query = `INSERT INTO messages(sender,receiver,text,date) VALUES('${senderId}','${receiverId}','${text}','${date}')`;
+        // const result2 = await queryAsync(querySelect);
+        io.emit(`receive:message:${receiverId}`, messageData);
+        console.log('emitter called: ', messageData);
       } else {
         // Handle unauthorized access
         console.log('Unauthorized access');
@@ -65,4 +113,4 @@ io.on('connection', socket => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-});
+}); 

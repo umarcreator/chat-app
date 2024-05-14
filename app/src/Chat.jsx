@@ -17,7 +17,7 @@ const Chat = () => {
     // senderId = MyID
     useEffect(() => {
       console.log('myId: ', senderId);
-      const socketHandler = message => {
+      const messageHandler = message => {
         // console.log('message received: ', message, message.text);
         const receiverId = message.senderId;
         const messages = messagesRef.current;
@@ -29,10 +29,10 @@ const Chat = () => {
             setMessages(prev => ({...prev, [receiverId]: [{ data: message.text, pos: 'left'}]}));
         }
       }
-      socket.on(`receive:message:${senderId}`, socketHandler);
+      socket.on(`receive:message:${senderId}`, messageHandler);
       
       return () => {
-          socket.off(`receive:message:${senderId}`, socketHandler);
+          socket.off(`receive:message:${senderId}`, messageHandler);
         // socket.disconnect();
       };
     }, []);
