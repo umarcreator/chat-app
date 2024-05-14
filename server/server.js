@@ -54,39 +54,67 @@ io.on('connection', socket => {
         const querySelect = `SELECT * FROM messages2 WHERE user='${senderId}' OR user='${receiverId}'`;
         const result = await queryAsync(querySelect);
         console.log('existing messages: ', result);
-        let allSenderMessages = [];
-        let allReceiverMessages = [];
+        let allSenderMessages;
+        let allReceiverMessages;
+        let senderMessagesAtoZ = {};
+        let receiverMessagesAtoZ = {};
         if(result.length > 0) {
           result.map(i => {
             if(i.user == senderId) {
-              allSenderMessages = JSON.parse(i.data);
+              if(JSON.parse(i.data)[receiverId]) {
+                allSenderMessages = JSON.parse(i.data)[receiverId];
+              } else {
+                allSenderMessages = [];
+                // new
+                // if(JSON.parse(i.data)[senderId]) {
+                //   allReceiverMessages = JSON.parse(i.data)[senderId];
+                // }
+              }
+              senderMessagesAtoZ = JSON.parse(i.data);
             }
             if(i.user == receiverId) {
-              allReceiverMessages = JSON.parse(i.data);
+              if(JSON.parse(i.data)[senderId]) {
+                allReceiverMessages = JSON.parse(i.data)[senderId];
+              } else {
+                allReceiverMessages = [];
+                // new
+                // if(JSON.parse(i.data)[receiverId]) {
+                //   allSenderMessages = JSON.parse(i.data)[receiverId];
+                // }
+              }
+              receiverMessagesAtoZ = JSON.parse(i.data);
             }
           });
-          const insert = async (user, allMessages) => {
+          const insert = async (user, otherUser, allMessages, allMessagesAtoZ) => {
             console.log('allMessages & data: ', allMessages, message);
             let query;
-            if(allMessages.length > 0) {
+            // if(allMessages == undefined) {
+            //   allMessages.push(message);
+            //   allMessagesAtoZ[otherUser] = allMessages;
+            // } else if(allMessages.length > 0) {
+            if(allMessages == undefined) {
+              console.log('allMessages == undefined: receiver, sender, allMessages, AtoZ', user, otherUser, allMessages, allMessagesAtoZ);
+              query = `INSERT INTO messages2(user,data,last_updated) VALUES('${user}','${JSON.stringify({ [otherUser]: [message] })}','${date}')`;
+              const result = await queryAsync(query);
+              return result;
+            } else if(allMessages?.length > 0 || allMessages?.length == 0) {
               allMessages.push(message);
-              query = `UPDATE messages2 SET data='${JSON.stringify(allMessages)}' WHERE user='${user}'`;
-            } else {
-              allMessages.push(message);
-              query = `INSERT INTO messages2(user,data,last_updated) VALUES('${user}','${JSON.stringify(allMessages)}','${date}')`;
+              allMessagesAtoZ[otherUser] = allMessages;
+              query = `UPDATE messages2 SET data='${JSON.stringify(allMessagesAtoZ)}' WHERE user='${user}'`;
+              const result = await queryAsync(query);
+              return result;
             }
-            const result = await queryAsync(query);
-            return result;
+            // allMessages.push(message);
+            // allMessagesAtoZ[otherUser] = allMessages;
+            // const query = `UPDATE messages2 SET data='${JSON.stringify(allMessagesAtoZ)}' WHERE user='${user}'`;
           }
-          await Promise.all([insert(senderId, allSenderMessages), insert(receiverId, allReceiverMessages)]);
+          await Promise.all([insert(senderId, receiverId,allSenderMessages, senderMessagesAtoZ), insert(receiverId, senderId, allReceiverMessages, receiverMessagesAtoZ)]);
         } else {
-          allSenderMessages.push(message);
-          allReceiverMessages.push(message);
-          const query = `INSERT INTO messages2(user,data,last_updated) VALUES('${senderId}','${JSON.stringify(allSenderMessages)}','${date}')`;
-          const query2 = `INSERT INTO messages2(user,data,last_updated) VALUES('${receiverId}','${JSON.stringify(allReceiverMessages)}','${date}')`;
-          const result = queryAsync(query);
-          const result2 = queryAsync(query2);
-          await Promise.all([result, result2]);
+          // allSenderMessages.push();
+          // allReceiverMessages.push({ [senderId]: [message] });
+          const query = `INSERT INTO messages2(user,data,last_updated) VALUES('${senderId}','${JSON.stringify({ [receiverId]: [message] })}','${date}')`;
+          const query2 = `INSERT INTO messages2(user,data,last_updated) VALUES('${receiverId}','${JSON.stringify({ [senderId]: [message] })}','${date}')`;
+          const result = await Promise.all([queryAsync(query), queryAsync(query2)]);
         }
         io.emit(`receive:message:${receiverId}`, messageData);
         console.log('emitter called: ', messageData);
